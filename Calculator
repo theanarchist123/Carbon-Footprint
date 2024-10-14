@@ -1,0 +1,287 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h> // For usleep
+
+#define BOLD "\033[1m"
+#define RED_COLOR "\033[31m"
+#define BLUE_COLOR "\033[34m"
+#define RESET_COLOR "\033[0m"
+#define GREEN_COLOR "\033[32m"
+#define YELLOW_COLOR "\033[33m"
+
+typedef struct Co2Source {
+    char name[100];
+    double co2Factor;
+    double quantity;
+    struct Co2Source *left;
+    struct Co2Source *right;
+} Co2Source;
+
+typedef struct HashMapEntry {
+    char name[100];
+    double co2Factor;
+    struct HashMapEntry *next;
+} HashMapEntry;
+
+#define HASH_MAP_SIZE 100
+HashMapEntry *hashMap[HASH_MAP_SIZE];
+
+void clear_screen() {
+#ifdef _WIN32
+    system("cls");
+#else
+    system("clear");
+#endif
+}
+
+void loading_animation(const char *label) {
+    const int max_loading = 100;
+
+    for (int i = 0; i <= max_loading; i++) {
+        printf("\033[H");
+        printf(GREEN_COLOR "%s: " RESET_COLOR, label);
+        printf("[");
+
+        for (int j = 0; j < 50; j++) {
+            if (j < (i / 2)) {
+                printf(BLUE_COLOR "#");
+            } else {
+                printf(RESET_COLOR " ");
+            }
+        }
+
+        printf(RESET_COLOR "] " YELLOW_COLOR "%d%%" RESET_COLOR "\n", i);
+        usleep(100000);  // Sleep for 100 milliseconds
+        printf("\033[K");
+    }
+}
+
+void carbon_splash_screen() {
+    clear_screen();
+    
+    printf("\n\n");
+    printf(GREEN_COLOR "    _____            _                  ______         _              _       _    " RESET_COLOR "\n");
+    printf(GREEN_COLOR "   /  __ \\         | |                 |  ___|        | |            (_)     | |   " RESET_COLOR "\n");
+    printf(GREEN_COLOR "  | /  \\/ __ _ _ __| |__   ___  _ __   | |_ ___   ___ | |_ _ __  _ __ _ _ __ | |_  " RESET_COLOR "\n");
+    printf(GREEN_COLOR "  | |    / _` | '__| '_ \\ / _ \\| '_ \\  |  _/ _ \\ / _ \\| __| '_ \\| '__| | '_ \\| __| " RESET_COLOR "\n");
+    printf(GREEN_COLOR "  | \\__/\\ (_| | |  | |_) | (_) | | | | | || (_) | (_) | |_| |_) | |  | | | | | |_  " RESET_COLOR "\n");
+    printf(GREEN_COLOR "   \\____/\\__,_|_|  |_.__/ \\___/|_| |_| \\_| \\___/ \\___/ \\__| .__/|_|  |_|_| |_|\\__| " RESET_COLOR "\n");
+    printf(GREEN_COLOR "                                                           | |                       " RESET_COLOR "\n");
+    printf(GREEN_COLOR "                                                           |_|                       " RESET_COLOR "\n");
+    
+    loading_animation("Initializing Carbon Footprint Analysis");
+    clear_screen();
+}
+
+int hash(char *str) {
+    int hash = 0;
+    while (*str) {
+        hash = (hash + *str) % HASH_MAP_SIZE;
+        str++;
+    }
+    return hash;
+}
+
+void insertHashMap(char *name, double co2Factor) {
+    int index = hash(name);
+    HashMapEntry *entry = (HashMapEntry *)malloc(sizeof(HashMapEntry));
+    strcpy(entry->name, name);
+    entry->co2Factor = co2Factor;
+    entry->next = hashMap[index];
+    hashMap[index] = entry;
+}
+
+double getCo2Factor(char *name) {
+    int index = hash(name);
+    HashMapEntry *current = hashMap[index];
+    while (current != NULL) {
+        if (strcmp(current->name, name) == 0) {
+            return current->co2Factor;
+        }
+        current = current->next;
+    }
+    return -1; // Return -1 if the source is not found
+}
+
+Co2Source *createCo2Source(char *name, double quantity) {
+    Co2Source *source = (Co2Source *)malloc(sizeof(Co2Source));
+    strcpy(source->name, name);
+    source->co2Factor = getCo2Factor(name);
+    source->quantity = quantity;
+    source->left = source->right = NULL;
+    return source;
+}
+
+Co2Source *insertCo2Source(Co2Source *root, char *name, double quantity) {
+    if (root == NULL) {
+        return createCo2Source(name, quantity);
+    }
+    double co2Value = getCo2Factor(name) * quantity;
+    if (co2Value < root->co2Factor * root->quantity) {
+        root->left = insertCo2Source(root->left, name, quantity);
+    } else {
+        root->right = insertCo2Source(root->right, name, quantity);
+    }
+    return root;
+}
+
+double calculateCarbonFootprint(Co2Source *root) {
+    if (root == NULL) return 0;
+    double footprint = root->co2Factor * root->quantity;
+    return footprint + calculateCarbonFootprint(root->left) + calculateCarbonFootprint(root->right);
+}
+
+void displayCo2Sources(Co2Source *root) {
+    if (root == NULL) return;
+    displayCo2Sources(root->left);
+    printf("%s (Quantity: %.2lf, CO2 Factor: %.2lf)\n", root->name, root->quantity, root->co2Factor);
+    displayCo2Sources(root->right);
+}
+
+void displayMainMenu() {
+    printf("Carbon Footprint Calculator\n");
+    printf("---------------------------\n");
+    printf("1. Calculate Building Carbon Footprint\n");
+    printf("2. Calculate Car Carbon Footprint\n");
+    printf("3. Calculate Bicycle Carbon Footprint\n");
+    printf("4. Exit\n");
+    printf("---------------------------\n");
+}
+
+void suggestMeasures(double footprint) {
+    if (footprint > 1000) {
+        printf("CO2 Footprint: %.2lf kg (High)\n", footprint);
+        printf("Suggestions to reduce CO2 emissions:\n");
+        printf("- Consider using renewable energy sources for electricity.\n");
+        printf("- Reduce water usage.\n");
+        printf("- Implement waste reduction strategies.\n");
+    } else if (footprint > 500) {
+        printf("CO2 Footprint: %.2lf kg (Moderate)\n", footprint);
+        printf("Suggestions to reduce CO2 emissions:\n");
+        printf("- Optimize energy use in buildings.\n");
+        printf("- Consider energy-efficient appliances.\n");
+    } else {
+        printf("CO2 Footprint: %.2lf kg (Low)\n", footprint);
+        printf("Great job! Keep up the efforts to maintain low emissions.\n");
+    }
+}
+
+void calculateBuildingCarbonFootprint() {
+    Co2Source *root = NULL;
+    int numSources;
+    char sourceName[100];
+    double quantity;
+
+    printf("Enter number of CO2 sources for the building: ");
+    scanf("%d", &numSources);
+
+    for (int i = 0; i < numSources; i++) {
+        printf("Enter CO2 Source %d Name (e.g., Water Pump, Garbage): ", i + 1);
+        scanf(" %[^\n]", sourceName);
+        printf("Enter Quantity: ");
+        scanf("%lf", &quantity);
+        root = insertCo2Source(root, sourceName, quantity);
+    }
+
+    printf("\nCO2 Sources in the Building:\n");
+    displayCo2Sources(root);
+    double totalFootprint = calculateCarbonFootprint(root);
+    printf("\nTotal Building Carbon Footprint: %.2lf kg\n", totalFootprint);
+    suggestMeasures(totalFootprint);
+}
+
+void calculateCarCarbonFootprint() {
+    Co2Source *root = NULL;
+    int numSources;
+    char carType[100];
+    char sourceName[100];
+    double quantity;
+
+    printf("Enter Car Type (e.g., SUV, Sedan, Hatchback): ");
+    scanf(" %[^\n]", carType);
+
+    printf("Enter number of CO2 sources for the car: ");
+    scanf("%d", &numSources);
+
+    for (int i = 0; i < numSources; i++) {
+        printf("Enter CO2 Source %d Name (e.g., Human, Dog, Cat): ", i + 1);
+        scanf(" %[^\n]", sourceName);
+        printf("Enter Quantity: ");
+        scanf("%lf", &quantity);
+        root = insertCo2Source(root, sourceName, quantity);
+    }
+
+    printf("\nCO2 Sources in the Car:\n");
+    displayCo2Sources(root);
+    double totalFootprint = calculateCarbonFootprint(root);
+    printf("\nTotal Car Carbon Footprint: %.2lf kg\n", totalFootprint);
+    suggestMeasures(totalFootprint);
+}
+
+void calculateBicycleCarbonFootprint() {
+    Co2Source *root = NULL;
+    int numSources;
+    char sourceName[100];
+    double quantity;
+
+    printf("Enter number of CO2 sources for the bicycle: ");
+    scanf("%d", &numSources);
+
+    for (int i = 0; i < numSources; i++) {
+        printf("Enter CO2 Source %d Name (e.g., Bicycle Tyres, Human): ", i + 1);
+        scanf(" %[^\n]", sourceName);
+        printf("Enter Quantity: ");
+        scanf("%lf", &quantity);
+        root = insertCo2Source(root, sourceName, quantity);
+    }
+
+    printf("\nCO2 Sources in the Bicycle:\n");
+    displayCo2Sources(root);
+    double totalFootprint = calculateCarbonFootprint(root);
+    printf("\nTotal Bicycle Carbon Footprint: %.2lf kg\n", totalFootprint);
+    suggestMeasures(totalFootprint);
+}
+
+int main() {
+    memset(hashMap, 0, sizeof(hashMap)); // Initialize hash map to NULL
+    carbon_splash_screen();  // Display splash screen
+    int choice = 0;
+
+    // Insert CO2 factors into the hash map
+    insertHashMap("electricity", 0.233);
+    insertHashMap("gas", 0.185);
+    insertHashMap("fuel", 2.31);
+    insertHashMap("water", 0);
+    insertHashMap("Garbage", 0.5); // Example CO2 factors for building
+    insertHashMap("Water Pump", 0.3);
+    insertHashMap("Human", 0.2); // Example CO2 factors for car
+    insertHashMap("Dog", 0.1);
+    insertHashMap("Cat", 0.1);
+    insertHashMap("Bicycle Tyres", 0.05); // Example CO2 factor for bicycle
+
+    while (choice != 4) {
+        displayMainMenu();
+        printf("Select an option: ");
+        scanf("%d", &choice);
+
+        switch (choice) {
+            case 1:
+                calculateBuildingCarbonFootprint();
+                break;
+            case 2:
+                calculateCarCarbonFootprint();
+                break;
+            case 3:
+                calculateBicycleCarbonFootprint();
+                break;
+            case 4:
+                printf("Exiting the program. Thank you!\n");
+                break;
+            default:
+                printf("Invalid choice. Please try again.\n");
+        }
+    }
+
+    return 0;
+}
